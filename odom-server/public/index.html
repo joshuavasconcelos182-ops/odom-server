@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+<canvas id="grafica"></canvas>
+
+<script>
+const ctx = document.getElementById("grafica");
+
+const chart = new Chart(ctx, {
+  type: "line",
+  data: {
+    labels: [],
+    datasets: [
+      { label: "valor1", data: [], borderColor: "blue" },
+      { label: "valor2", data: [], borderColor: "red" }
+    ]
+  }
+});
+
+setInterval(async () => {
+  const res = await fetch("/data");
+  const data = await res.json();
+
+  chart.data.labels.push(new Date().toLocaleTimeString());
+  chart.data.datasets[0].data.push(data.valor1);
+  chart.data.datasets[1].data.push(data.valor2);
+
+  chart.update();
+
+}, 500);
+</script>
+
+</body>
+</html>

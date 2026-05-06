@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ODO — Sistema de Odometría</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700&family=Barlow:wght@300;400;500&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg0:    #0d1117;
+  --bg1:    #161b22;
+  --bg2:    #1c2333;
+  --bg3:    #21262d;
+  --panel:  #1a2035;
+  --border: rgba(255,255,255,0.08);
+  --border2:rgba(255,255,255,0.14);
+  --L:      #4d9de0;
+  --L2:     #7bbcf0;
+  --L-glow: rgba(77,157,224,0.2);
+  --R:      #e07c4d;
+  --R2:     #f0a87b;
+  --R-glow: rgba(224,124,77,0.2);
+  --text:   #e6edf3;
+  --muted:  #7d8590;
+  --muted2: #484f58;
+  --green:  #3fb950;
+  --red:    #f85149;
+  --font-hud:  'Barlow Condensed', sans-serif;
+  --font-body: 'Barlow', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg0);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 13px;
+  overflow: hidden;
+}
+
+/* ── LAYOUT GLOBAL ── */
+.app {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── HUD HEADER ── */
+.hud-header {
+  background: var(--bg1);
+  border-bottom: 1px solid var(--border2);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: stretch;
+  padding: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.hud-header::before {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--L) 0%, var(--L) 60%, transparent 100%);
+  opacity: 0.6;
+}
+
+.hud-theta {
+  padding: 14px 28px;
+  position: relative;
+}
+
+.hud-theta-label {
+  font-family: var(--font-hud);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+
+.hud-theta-val {
+  font-family: var(--font-hud);
+  font-size: 56px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--L2);
+  line-height: 1;
+}
+
+/* decorative bracket */
+.hud-theta::after {
+  content: '';
+  position: absolute;
+  top: 10px; right: 0;
+  width: 60%;
+  height: calc(100% - 20px);
+  border-top: 1px solid var(--L);
+  border-right: 1px solid var(--L);
+  opacity: 0.4;
+}
+
+.hud-pos {
+  padding: 14px 28px;
+  text-align: right;
+  border-left: 1px solid var(--border);
+}
+
+.hud-pos-label {
+  font-family: var(--font-hud);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+
+.hud-pos-val {
+  font-family: var(--font-hud);
+  font-size: 36px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  line-height: 1;
+}
+
+.hud-pos-dist {
+  font-family: var(--font-hud);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* ── BODY ── */
+.body {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  overflow: hidden;
+}
+
+/* ── LEFT PANEL ── */
+.left-panel {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+  border-right: 1px solid var(--border);
+}
+
+/* Encoders row */
+.encoders-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1px solid var(--border);
+}
+
+.encoder-card {
+  padding: 16px 22px;
+  position: relative;
+  overflow: hidden;
+}
+
+.encoder-card.L { border-right: 1px solid var(--border); }
+
+.encoder-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+}
+.encoder-card.L::before { background: var(--L); box-shadow: 0 0 8px var(--L-glow); }
+.encoder-card.R::before { background: var(--R); box-shadow: 0 0 8px var(--R-glow); }
+
+.enc-label {
+  font-family: var(--font-hud);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.enc-label.L { color: var(--L); }
+.enc-label.R { color: var(--R); }
+
+.enc-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--muted2);
+  transition: all 0.3s;
+}
+.enc-dot.on.L { background: var(--L); box-shadow: 0 0 6px var(--L); }
+.enc-dot.on.R { background: var(--R); box-shadow: 0 0 6px var(--R); }
+
+.enc-ticks {
+  font-family: var(--font-hud);
+  font-size: 48px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.enc-ticks.L { color: var(--L); }
+.enc-ticks.R { color: var(--R); }
+
+.enc-dist {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 300;
+}
+
+.enc-status {
+  position: absolute;
+  top: 14px; right: 18px;
+  font-family: var(--font-hud);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--muted2);
+}
+
+/* ── CANVAS AREA ── */
+.canvas-area {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg0);
+}
+
+#traj-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+
+.canvas-overlay {
+  position: absolute;
+  top: 12px; right: 12px;
+  display: flex;
+  gap: 6px;
+  z-index: 10;
+}
+
+/* ── RIGHT PANEL ── */
+.right-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg1);
+}
+
+.rpanel-section {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.rpanel-label {
+  font-family: var(--font-hud);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+/* Controls bar */
+.controls-bar {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.frame-ctr {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted);
+  margin-left: 4px;
+}
+
+/* Stats grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.stat-box {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 10px 12px;
+}
+
+.stat-box-label {
+  font-family: var(--font-hud);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.stat-box-val {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+.stat-box-val.L { color: var(--L); }
+.stat-box-val.R { color: var(--R); }
+
+/* Charts */
+.chart-section {
+  flex-shrink: 0;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Axes */
+.axes-section {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.axis-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--border);
+}
+.axis-row:last-child { border-bottom: none; }
+
+.axis-key {
+  font-family: var(--font-hud);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.axis-val-txt {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text);
+}
+
+/* Log */
+.log-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.log-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.log-title {
+  font-family: var(--font-hud);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-right: 6px;
+}
+
+#log-box {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 16px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.8;
+  color: var(--muted);
+}
+#log-box::-webkit-scrollbar { width: 3px; }
+#log-box::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 2px; }
+
+.log-line { display: flex; gap: 8px; }
+.log-ts   { color: var(--muted2); min-width: 58px; }
+.log-tag  { font-weight: 500; min-width: 42px; }
+.log-tag.tick  { color: var(--L); }
+.log-tag.odo   { color: var(--green); }
+.log-tag.speed { color: var(--R); }
+.log-tag.warn  { color: var(--red); }
+
+/* ── BUTTONS ── */
+.btn {
+  font-family: var(--font-hud);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 5px 12px;
+  border-radius: 3px;
+  border: 1px solid var(--border2);
+  background: var(--bg2);
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn:hover     { background: var(--bg3); color: var(--text); border-color: var(--border2); }
+.btn.active    { background: var(--L); color: #fff; border-color: var(--L); }
+.btn.L.active  { background: var(--L); border-color: var(--L); color: #fff; }
+.btn.danger:hover { background: rgba(248,81,73,0.15); color: var(--red); border-color: var(--red); }
+.btn:disabled  { opacity: 0.2; cursor: not-allowed; }
+
+/* pill filters */
+.pill {
+  font-family: var(--font-hud);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 3px;
+  border: 1px solid var(--border2);
+  background: transparent;
+  color: var(--muted2);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.pill.active.tick  { border-color: var(--L); color: var(--L); background: var(--L-glow); }
+.pill.active.odo   { border-color: var(--green); color: var(--green); background: rgba(63,185,80,0.1); }
+.pill.active.speed { border-color: var(--R); color: var(--R); background: var(--R-glow); }
+.pill.active.warn  { border-color: var(--red); color: var(--red); background: rgba(248,81,73,0.1); }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ══ HUD HEADER ══ -->
+  <div class="hud-header">
+    <div class="hud-theta">
+      <div class="hud-theta-label">Orientación angular (θ)</div>
+      <div class="hud-theta-val" id="hud-theta">0.00°</div>
+    </div>
+    <div class="hud-pos">
+      <div class="hud-pos-label">Posición global</div>
+      <div class="hud-pos-val" id="hud-pos">0.00, 0.00 <span style="font-size:20px;font-weight:300;">m</span></div>
+      <div class="hud-pos-dist" id="hud-dist">Distancia total: 0.0000 m</div>
+    </div>
+  </div>
+
+  <!-- ══ BODY ══ -->
+  <div class="body">
+
+    <!-- LEFT -->
+    <div class="left-panel">
+
+      <!-- Encoders -->
+      <div class="encoders-row">
+        <div class="encoder-card L">
+          <div class="enc-label L">
+            <div class="enc-dot" id="dot-l"></div>
+            Encoder Left (3000)
+          </div>
+          <div class="enc-ticks L" id="ticks-l">0</div>
+          <div class="enc-dist" id="dist-l">0.0000 m</div>
+          <div class="enc-status" id="est-l">OFFLINE</div>
+        </div>
+        <div class="encoder-card R">
+          <div class="enc-label R">
+            <div class="enc-dot" id="dot-r"></div>
+            Encoder Right (3001)
+          </div>
+          <div class="enc-ticks R" id="ticks-r">0</div>
+          <div class="enc-dist" id="dist-r">0.0000 m</div>
+          <div class="enc-status" id="est-r">OFFLINE</div>
+        </div>
+      </div>
+
+      <!-- Canvas trayectoria -->
+      <div class="canvas-area">
+        <canvas id="traj-canvas"></canvas>
+        <div class="canvas-overlay">
+          <button class="btn active" id="btn-seguir" onclick="setVM('seguir')">Seguir</button>
+          <button class="btn" id="btn-libre" onclick="setVM('libre')">Libre</button>
+          <button class="btn" onclick="zoomBy(1.2)">+</button>
+          <button class="btn" onclick="zoomBy(0.8)">−</button>
+          <button class="btn" onclick="zoomReset()">1:1</button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT PANEL -->
+    <div class="right-panel">
+
+      <!-- Controles -->
+      <div class="rpanel-section">
+        <div class="rpanel-label">Controles</div>
+        <div class="controls-bar">
+          <button class="btn" onclick="resetOdo()">↺ Pos</button>
+          <button class="btn danger" onclick="resetAll()">↺ Todo</button>
+          <button class="btn" id="btn-play"  onclick="doPlay()">▶</button>
+          <button class="btn" id="btn-pause" onclick="doPause()">⏸</button>
+          <button class="btn" id="btn-stop"  onclick="doStop()">■</button>
+          <button class="btn" id="btn-back"  onclick="stepBack()"    disabled>◀◀</button>
+          <button class="btn" id="btn-fwd"   onclick="stepForward()" disabled>▶▶</button>
+          <span class="frame-ctr" id="frame-ctr">0 / 0</span>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="stat-box-label">Vel. Izquierda</div>
+          <div class="stat-box-val L" id="stat-vl">0.000 m/s</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-box-label">Vel. Derecha</div>
+          <div class="stat-box-val R" id="stat-vr">0.000 m/s</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-box-label">Posición X</div>
+          <div class="stat-box-val" id="stat-x">0.0000 m</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-box-label">Posición Y</div>
+          <div class="stat-box-val" id="stat-y">0.0000 m</div>
+        </div>
+      </div>
+
+      <!-- Chart velocidad -->
+      <div class="chart-section">
+        <div class="rpanel-label">Velocidad (m/s)</div>
+        <canvas id="chart-vel" height="70"></canvas>
+      </div>
+
+      <!-- Chart diff -->
+      <div class="chart-section">
+        <div class="rpanel-label">Diferencia Ticks</div>
+        <canvas id="chart-diff" height="55"></canvas>
+      </div>
+
+      <!-- Ejes -->
+      <div class="axes-section">
+        <div class="rpanel-label">Ejes de referencia</div>
+        <div class="axis-row">
+          <span class="axis-key">Global X/Y</span>
+          <span class="axis-val-txt" id="ax-g">0.0000 / 0.0000 m</span>
+        </div>
+        <div class="axis-row">
+          <span class="axis-key">Local Adel/Lat</span>
+          <span class="axis-val-txt" id="ax-l">0.0000 / 0.0000 m</span>
+        </div>
+        <div class="axis-row">
+          <span class="axis-key" style="color:var(--L);">Rueda L</span>
+          <span class="axis-val-txt" id="ax-lw">0.0000 / 0.0000 m</span>
+        </div>
+        <div class="axis-row">
+          <span class="axis-key" style="color:var(--R);">Rueda R</span>
+          <span class="axis-val-txt" id="ax-rw">0.0000 / 0.0000 m</span>
+        </div>
+      </div>
+
+      <!-- Log -->
+      <div class="log-section">
+        <div class="log-header">
+          <span class="log-title">Log</span>
+          <span class="pill tick  active" id="pill-tick"  onclick="toggleF('tick')">TICK</span>
+          <span class="pill odo   active" id="pill-odo"   onclick="toggleF('odo')">ODO</span>
+          <span class="pill speed active" id="pill-speed" onclick="toggleF('speed')">SPD</span>
+          <span class="pill warn  active" id="pill-warn"  onclick="toggleF('warn')">WARN</span>
+          <button class="btn" style="margin-left:auto;padding:2px 8px;font-size:9px;" onclick="clearLog()">CLR</button>
+          <button class="btn" style="padding:2px 8px;font-size:9px;" onclick="exportLog()">EXP</button>
+        </div>
+        <div id="log-box"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+// ══ CONSTANTES ══
+const D    = 0.14;
+const CIRC = Math.PI * D;
+const BL   = 0.30;
+const DT_T = 50;
+const DT_C = 200;
+
+// ══ ESTADO ══
+let S = mkS();
+function mkS() {
+  return { tL:0,tR:0,pL:0,pR:0,vL:0,vR:0,x:0,y:0,th:0,dist:0,path:[{x:0,y:0}],onL:false,onR:false };
+}
+
+let playing=true, snaps=[], si=-1, logE=[];
+const MAXS=1000, MAXL=200;
+let filt={ tick:true,odo:true,speed:true,warn:true };
+
+// ══ CHART FACTORY ══
+function mkChart(id, dsets, h) {
+  return new Chart(document.getElementById(id), {
+    type:'line',
+    data:{ labels:[], datasets:dsets },
+    options:{
+      responsive:true, animation:false,
+      interaction:{ mode:'index', intersect:false },
+      plugins:{ legend:{ display:false } },
+      scales:{
+        x:{ grid:{color:'rgba(255,255,255,0.04)'}, ticks:{color:'#484f58',font:{family:"'JetBrains Mono',monospace",size:8},maxTicksLimit:5,maxRotation:0} },
+        y:{ grid:{color:'rgba(255,255,255,0.04)'}, ticks:{color:'#484f58',font:{family:"'JetBrains Mono',monospace",size:8}} }
+      }
+    }
+  });
+}
+
+const cVel  = mkChart('chart-vel',[
+  {label:'L',data:[],borderColor:'#4d9de0',backgroundColor:'rgba(77,157,224,0.08)',borderWidth:1.5,tension:0.4,pointRadius:0,fill:true},
+  {label:'R',data:[],borderColor:'#e07c4d',backgroundColor:'rgba(224,124,77,0.08)',borderWidth:1.5,tension:0.4,pointRadius:0,fill:true},
+]);
+const cDiff = mkChart('chart-diff',[
+  {label:'Δ',data:[],borderColor:'#a57de0',backgroundColor:'rgba(165,125,224,0.08)',borderWidth:1.5,tension:0.4,pointRadius:0,fill:true},
+]);
+
+function push(ch,label,vals){
+  ch.data.labels.push(label);
+  vals.forEach((v,i)=>ch.data.datasets[i].data.push(v));
+  if(ch.data.labels.length>60){ch.data.labels.shift();ch.data.datasets.forEach(d=>d.data.shift());}
+  ch.update('none');
+}
+function clrCh(ch){ch.data.labels=[];ch.data.datasets.forEach(d=>d.data=[]);ch.update('none');}
+
+// ══ CANVAS ══
+const cv=document.getElementById('traj-canvas');
+const cx=cv.getContext('2d');
+let vm='seguir',zoom=70,panX=0,panY=0;
+let drag=false,dS={x:0,y:0},pS={x:0,y:0};
+
+function resizeCanvas(){
+  const r=cv.parentElement.getBoundingClientRect();
+  cv.width=r.width; cv.height=r.height;
+  panX=r.width/2; panY=r.height/2;
+  draw();
+}
+
+cv.addEventListener('mousedown',e=>{if(vm!=='libre')return;drag=true;dS={x:e.clientX,y:e.clientY};pS={x:panX,y:panY};});
+window.addEventListener('mousemove',e=>{if(!drag)return;panX=pS.x+(e.clientX-dS.x);panY=pS.y+(e.clientY-dS.y);draw();});
+window.addEventListener('mouseup',()=>drag=false);
+cv.addEventListener('wheel',e=>{if(vm!=='libre')return;e.preventDefault();zoom=Math.max(8,Math.min(zoom*(e.deltaY<0?1.12:0.9),4000));draw();},{passive:false});
+window.addEventListener('resize',resizeCanvas);
+
+function setVM(m){
+  vm=m;
+  document.getElementById('btn-seguir').classList.toggle('active',m==='seguir');
+  document.getElementById('btn-libre').classList.toggle('active',m==='libre');
+  draw();
+}
+function zoomBy(f){zoom=Math.max(8,Math.min(zoom*f,4000));draw();}
+function zoomReset(){zoom=70;const r=cv.getBoundingClientRect();panX=r.width/2;panY=r.height/2;draw();}
+function w2c(wx,wy){return{cx:panX+wx*zoom,cy:panY-wy*zoom};}
+
+function draw(){
+  const W=cv.width,H=cv.height;
+  if(!W||!H)return;
+  cx.clearRect(0,0,W,H);
+  // dark bg
+  cx.fillStyle='#0d1117';cx.fillRect(0,0,W,H);
+
+  // Autofollow
+  if(vm==='seguir'&&S.path.length>1){
+    const xs=S.path.map(p=>p.x),ys=S.path.map(p=>p.y);
+    const rng=Math.max(Math.max(...xs)-Math.min(...xs),Math.max(...ys)-Math.min(...ys),0.6);
+    zoom=Math.min((W<H?W:H)*0.6/rng,300);
+    panX=W/2-S.x*zoom; panY=H/2+S.y*zoom;
+  }
+
+  // Grid sutil
+  const gridStep=zoom*0.5;
+  const ox=(panX%gridStep+gridStep)%gridStep, oy=(panY%gridStep+gridStep)%gridStep;
+  cx.save(); cx.strokeStyle='rgba(255,255,255,0.025)'; cx.lineWidth=1;
+  for(let x=ox;x<W;x+=gridStep){cx.beginPath();cx.moveTo(x,0);cx.lineTo(x,H);cx.stroke();}
+  for(let y=oy;y<H;y+=gridStep){cx.beginPath();cx.moveTo(0,y);cx.lineTo(W,y);cx.stroke();}
+  cx.restore();
+
+  // Ejes globales
+  const o=w2c(0,0);
+  cx.save(); cx.setLineDash([3,6]); cx.strokeStyle='rgba(77,157,224,0.25)'; cx.lineWidth=1;
+  cx.beginPath();cx.moveTo(o.cx,0);cx.lineTo(o.cx,H);cx.stroke();
+  cx.beginPath();cx.moveTo(0,o.cy);cx.lineTo(W,o.cy);cx.stroke();
+  cx.restore();
+
+  // Trayectoria futura (historial)
+  if(si>=0&&si<snaps.length-1){
+    const fp=snaps[snaps.length-1].path;
+    cx.save(); cx.setLineDash([3,5]); cx.strokeStyle='rgba(77,157,224,0.18)'; cx.lineWidth=1.5;
+    cx.beginPath(); fp.forEach((p,i)=>{const c=w2c(p.x,p.y);i===0?cx.moveTo(c.cx,c.cy):cx.lineTo(c.cx,c.cy);});
+    cx.stroke(); cx.restore();
+  }
+
+  // Trayectoria real con degradado de opacidad
+  if(S.path.length>1){
+    const n=S.path.length;
+    for(let i=1;i<n;i++){
+      const alpha=0.3+0.7*(i/n);
+      const a=w2c(S.path[i-1].x,S.path[i-1].y);
+      const b=w2c(S.path[i].x,S.path[i].y);
+      cx.save();
+      cx.strokeStyle=`rgba(77,157,224,${alpha})`;
+      cx.lineWidth=1.8; cx.lineJoin='round';
+      cx.beginPath();cx.moveTo(a.cx,a.cy);cx.lineTo(b.cx,b.cy);cx.stroke();
+      cx.restore();
+    }
+  }
+
+  const car=w2c(S.x,S.y),th=S.th,hw=(BL/2)*zoom;
+  const lx=car.cx-Math.sin(th)*hw, ly=car.cy-Math.cos(th)*hw;
+  const rx=car.cx+Math.sin(th)*hw, ry=car.cy+Math.cos(th)*hw;
+
+  // Línea entre ruedas
+  cx.save();cx.strokeStyle='rgba(255,255,255,0.2)';cx.lineWidth=1;
+  cx.beginPath();cx.moveTo(lx,ly);cx.lineTo(rx,ry);cx.stroke();cx.restore();
+
+  // Rueda L — glow azul
+  cx.save();
+  cx.shadowColor='#4d9de0'; cx.shadowBlur=10;
+  cx.fillStyle='#4d9de0';
+  cx.beginPath();cx.arc(lx,ly,4,0,Math.PI*2);cx.fill();
+  cx.restore();
+
+  // Rueda R — glow naranja
+  cx.save();
+  cx.shadowColor='#e07c4d'; cx.shadowBlur=10;
+  cx.fillStyle='#e07c4d';
+  cx.beginPath();cx.arc(rx,ry,4,0,Math.PI*2);cx.fill();
+  cx.restore();
+
+  // Cuerpo — cuadrado blanco (como en la imagen)
+  cx.save();
+  cx.shadowColor='rgba(255,255,255,0.5)'; cx.shadowBlur=8;
+  cx.fillStyle='#ffffff';
+  const hw2=7, cos=Math.cos(th), sin=Math.sin(th);
+  cx.beginPath();
+  cx.moveTo(car.cx+hw2*(cos-sin), car.cy-hw2*(sin+cos));
+  cx.lineTo(car.cx+hw2*(cos+sin), car.cy-hw2*(sin-cos));
+  cx.lineTo(car.cx-hw2*(cos-sin), car.cy+hw2*(sin+cos));
+  cx.lineTo(car.cx-hw2*(cos+sin), car.cy+hw2*(sin-cos));
+  cx.closePath(); cx.fill();
+  cx.restore();
+
+  // Flecha orientación
+  const al=22, ax=car.cx+Math.cos(th)*al, ay=car.cy-Math.sin(th)*al;
+  cx.save(); cx.strokeStyle='rgba(255,255,255,0.7)'; cx.lineWidth=1.5; cx.lineCap='round';
+  cx.beginPath();cx.moveTo(car.cx,car.cy);cx.lineTo(ax,ay);cx.stroke();
+  const ha=Math.atan2(car.cy-ay,ax-car.cx);
+  cx.beginPath();
+  cx.moveTo(ax,ay);cx.lineTo(ax-7*Math.cos(ha-0.4),ay+7*Math.sin(ha-0.4));
+  cx.moveTo(ax,ay);cx.lineTo(ax-7*Math.cos(ha+0.4),ay+7*Math.sin(ha+0.4));
+  cx.stroke();cx.restore();
+}
+
+// ══ POLLING TICKS — 50ms ══
+async function fetchT(port,side){
+  try{const r=await fetch(`http://localhost:${port}/ticks`);const d=await r.json();
+    side==='L'?S.onL=true:S.onR=true;return d.ticks;}
+  catch{side==='L'?S.onL=false:S.onR=false;return null;}
+}
+
+setInterval(async()=>{
+  if(!playing)return;
+  const [tL,tR]=await Promise.all([fetchT(3000,'L'),fetchT(3001,'R')]);
+  // dots
+  const dl=document.getElementById('dot-l'), dr=document.getElementById('dot-r');
+  dl.className='enc-dot'+(S.onL?' on L':'');
+  dr.className='enc-dot'+(S.onR?' on R':'');
+  document.getElementById('est-l').textContent=S.onL?'ONLINE':'OFFLINE';
+  document.getElementById('est-r').textContent=S.onR?'ONLINE':'OFFLINE';
+  if(tL!==null)S.tL=tL; if(tR!==null)S.tR=tR;
+  document.getElementById('ticks-l').textContent=S.tL;
+  document.getElementById('ticks-r').textContent=S.tR;
+  document.getElementById('dist-l').textContent=(S.tL*CIRC).toFixed(4)+' m';
+  document.getElementById('dist-r').textContent=(S.tR*CIRC).toFixed(4)+' m';
+},DT_T);
+
+// ══ ODO + CHARTS — 200ms ══
+setInterval(()=>{
+  if(!playing||(!S.onL&&!S.onR))return;
+  const dt=DT_C/1000;
+  const ts=new Date().toLocaleTimeString('es-MX',{hour12:false});
+  const dL=S.tL-S.pL,dR=S.tR-S.pR;
+  S.pL=S.tL;S.pR=S.tR;
+  S.vL=(dL*CIRC)/dt;S.vR=(dR*CIRC)/dt;
+  const iL=dL*CIRC,iR=dR*CIRC;
+  const dc=(iL+iR)/2,dth=(iR-iL)/BL;
+  S.th+=dth;S.x+=dc*Math.cos(S.th);S.y+=dc*Math.sin(S.th);S.dist+=Math.abs(dc);
+  if(dc!==0||dth!==0)S.path.push({x:S.x,y:S.y});
+  const td=(S.th*180/Math.PI).toFixed(2);
+  const hw=BL/2;
+  const lwx=S.x-Math.sin(S.th)*hw,lwy=S.y+Math.cos(S.th)*hw;
+  const rwx=S.x+Math.sin(S.th)*hw,rwy=S.y-Math.cos(S.th)*hw;
+
+  // HUD header
+  document.getElementById('hud-theta').textContent=td+'°';
+  document.getElementById('hud-pos').innerHTML=`${S.x.toFixed(2)}, ${S.y.toFixed(2)} <span style="font-size:20px;font-weight:300;">m</span>`;
+  document.getElementById('hud-dist').textContent=`Distancia total: ${S.dist.toFixed(4)} m`;
+
+  // Stats
+  document.getElementById('stat-vl').textContent=S.vL.toFixed(3)+' m/s';
+  document.getElementById('stat-vr').textContent=S.vR.toFixed(3)+' m/s';
+  document.getElementById('stat-x').textContent=S.x.toFixed(4)+' m';
+  document.getElementById('stat-y').textContent=S.y.toFixed(4)+' m';
+
+  // Ejes
+  document.getElementById('ax-g').textContent=`${S.x.toFixed(4)} / ${S.y.toFixed(4)} m`;
+  document.getElementById('ax-l').textContent=`${dc.toFixed(4)} / ${(dth*(BL/2)).toFixed(4)} m`;
+  document.getElementById('ax-lw').textContent=`${lwx.toFixed(4)} / ${lwy.toFixed(4)} m`;
+  document.getElementById('ax-rw').textContent=`${rwx.toFixed(4)} / ${rwy.toFixed(4)} m`;
+
+  push(cVel,ts,[S.vL,S.vR]);
+  push(cDiff,ts,[S.tL-S.tR]);
+  draw();
+
+  if(dL!==0||dR!==0)addLog('tick',`L=${S.tL} R=${S.tR} dL=+${dL} dR=+${dR}`);
+  addLog('odo',`θ=${td}° x=${S.x.toFixed(3)} y=${S.y.toFixed(3)} d=${S.dist.toFixed(3)}m`);
+  addLog('speed',`vL=${S.vL.toFixed(3)}m/s vR=${S.vR.toFixed(3)}m/s`);
+  if(Math.abs(S.tL-S.tR)>5)addLog('warn',`Δticks=${Math.abs(S.tL-S.tR)} supera umbral`);
+  saveSnap();updFCtr();
+},DT_C);
+
+// ══ SNAPSHOTS ══
+function saveSnap(){
+  if(snaps.length>=MAXS)snaps.shift();
+  snaps.push({tL:S.tL,tR:S.tR,x:S.x,y:S.y,th:S.th,dist:S.dist,
+    path:S.path.map(p=>({...p})),log:[...logE],
+    vD:cVel.data.datasets.map(d=>[...d.data]),vL:[...cVel.data.labels],
+    diD:[...cDiff.data.datasets[0].data],chL:[...cDiff.data.labels]});
+  si=snaps.length-1;
+}
+
+function restoreSnap(s){
+  S.tL=s.tL;S.tR=s.tR;S.x=s.x;S.y=s.y;S.th=s.th;S.dist=s.dist;
+  S.path=s.path.map(p=>({...p}));logE=[...s.log];renderLog();
+  cVel.data.labels=[...s.vL];s.vD.forEach((d,i)=>cVel.data.datasets[i].data=[...d]);cVel.update('none');
+  cDiff.data.labels=[...s.chL];cDiff.data.datasets[0].data=[...s.diD];cDiff.update('none');
+  const td=(s.th*180/Math.PI).toFixed(2);
+  document.getElementById('ticks-l').textContent=s.tL;
+  document.getElementById('ticks-r').textContent=s.tR;
+  document.getElementById('hud-theta').textContent=td+'°';
+  document.getElementById('hud-pos').innerHTML=`${s.x.toFixed(2)}, ${s.y.toFixed(2)} <span style="font-size:20px;font-weight:300;">m</span>`;
+  document.getElementById('hud-dist').textContent=`Distancia total: ${s.dist.toFixed(4)} m`;
+  document.getElementById('stat-x').textContent=s.x.toFixed(4)+' m';
+  document.getElementById('stat-y').textContent=s.y.toFixed(4)+' m';
+  document.getElementById('stat-vl').textContent='— m/s';
+  document.getElementById('stat-vr').textContent='— m/s';
+  draw();
+}
+
+function updFCtr(){document.getElementById('frame-ctr').textContent=`${si+1} / ${snaps.length}`;}
+
+// ══ CONTROLES ══
+function doPlay(){
+  if(si<snaps.length-1){snaps=snaps.slice(0,si+1);const s=snaps[si];S.pL=s.tL;S.pR=s.tR;
+    fetch('http://localhost:3000/reset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({value:s.tL})}).catch(()=>{});
+    fetch('http://localhost:3001/reset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({value:s.tR})}).catch(()=>{});}
+  playing=true;setNav(false);
+}
+function doPause(){playing=false;setNav(true);}
+function doStop(){playing=false;setNav(false);}
+function setNav(on){document.getElementById('btn-back').disabled=!on;document.getElementById('btn-fwd').disabled=!on;}
+function stepBack(){if(si>0){si--;restoreSnap(snaps[si]);updFCtr();}}
+function stepForward(){if(si<snaps.length-1){si++;restoreSnap(snaps[si]);updFCtr();}}
+
+function resetOdo(){S.x=0;S.y=0;S.th=0;S.dist=0;S.path=[{x:0,y:0}];draw();}
+async function resetAll(){
+  S=mkS();snaps=[];si=-1;logE=[];renderLog();
+  [cVel,cDiff].forEach(clrCh);
+  await Promise.all([
+    fetch('http://localhost:3000/reset',{method:'POST',headers:{'Content-Type':'application/json'},body:'{"value":0}'}).catch(()=>{}),
+    fetch('http://localhost:3001/reset',{method:'POST',headers:{'Content-Type':'application/json'},body:'{"value":0}'}).catch(()=>{}),
+  ]);
+  draw();updFCtr();
+}
+
+// ══ LOG ══
+function addLog(type,msg){
+  const ts=new Date().toLocaleTimeString('es-MX',{hour12:false});
+  if(logE.length>=MAXL)logE.shift();
+  logE.push({type,msg,ts});
+  if(filt[type])appendLine(type,msg,ts);
+}
+function appendLine(type,msg,ts){
+  const box=document.getElementById('log-box');
+  const d=document.createElement('div');d.className='log-line';d.dataset.type=type;
+  d.innerHTML=`<span class="log-ts">${ts}</span><span class="log-tag ${type}">${type.toUpperCase()}</span><span>${msg}</span>`;
+  box.appendChild(d);
+  if(box.children.length>MAXL)box.firstChild.remove();
+  box.scrollTop=box.scrollHeight;
+}
+function renderLog(){const box=document.getElementById('log-box');box.innerHTML='';logE.filter(e=>filt[e.type]).forEach(e=>appendLine(e.type,e.msg,e.ts));}
+function toggleF(t){filt[t]=!filt[t];document.getElementById(`pill-${t}`).classList.toggle('active',filt[t]);renderLog();}
+function clearLog(){logE=[];document.getElementById('log-box').innerHTML='';}
+function exportLog(){
+  const lines=['=== CONFIGURACIÓN ===',`Diámetro: ${D*1000}mm  Circ: ${CIRC.toFixed(4)}m  Base: ${BL*1000}mm`,
+    '','=== TICKS ===',`L: ${S.tL} (${(S.tL*CIRC).toFixed(4)}m)  R: ${S.tR} (${(S.tR*CIRC).toFixed(4)}m)`,
+    '','=== ODOMETRÍA ===',`θ: ${(S.th*180/Math.PI).toFixed(2)}°  X: ${S.x.toFixed(4)}m  Y: ${S.y.toFixed(4)}m  dist: ${S.dist.toFixed(4)}m`,
+    '','=== TRAYECTORIA ===','i\tx\ty',...S.path.map((p,i)=>`${i}\t${p.x.toFixed(4)}\t${p.y.toFixed(4)}`),
+    '','=== LOG ===',...logE.map(e=>`[${e.ts}] ${e.type.toUpperCase().padEnd(5)} ${e.msg}`)];
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([lines.join('\n')],{type:'text/plain'}));
+  a.download=`odo_${Date.now()}.txt`;a.click();
+}
+
+// ══ INIT ══
+window.addEventListener('load', resizeCanvas);
+resizeCanvas();
+updFCtr();
+</script>
+</body>
+</html>
